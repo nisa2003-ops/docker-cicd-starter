@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
   PageId,
   PipelineRun,
@@ -26,8 +26,15 @@ interface AppContextType {
   activePage: PageId;
   setActivePage: (page: PageId) => void;
   metrics: SystemMetrics;
+  isLiveMetrics: boolean;
+  metricsLoading: boolean;
+  metricsError: string | null;
+  loadLiveMetrics: () => Promise<void>;
+
   engineInfo: DockerEngineInfo;
   pipelineRuns: PipelineRun[];
+  pipelineConfigured: boolean;
+  pipelineMessage: string;
   containers: DockerContainer[];
   images: DockerImage[];
   logs: LogEntry[];
@@ -46,10 +53,12 @@ interface AppContextType {
   
   // Backend availability status
   apiOnline: boolean;
+  backendLatencyMs: number;
+  backendVersion: string;
   checkBackendHealth: () => Promise<void>;
   
   // Interactive operations
-  triggerNewRun: (pipelineName: string, branch: string) => Promise<void>;
+  triggerNewRun: (pipelineName: string, branch: string, environment?: string) => Promise<void>;
   toggleContainer: (id: string, action: 'start' | 'stop' | 'restart') => void;
   startAllContainers: () => void;
   stopAllContainers: () => void;
@@ -70,8 +79,15 @@ const AppStateContext = createContext<AppContextType | undefined>(undefined);
 export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activePage, setActivePage] = useState<PageId>('overview');
   const [metrics, setMetrics] = useState<SystemMetrics>(INITIAL_SYSTEM_METRICS);
+  const [isLiveMetrics, setIsLiveMetrics] = useState<boolean>(false);
+  const [metricsLoading, setMetricsLoading] = useState<boolean>(false);
+  const [metricsError, setMetricsError] = useState<string | null>(null);
+
   const [engineInfo, setEngineInfo] = useState<DockerEngineInfo>(INITIAL_DOCKER_ENGINE);
   const [pipelineRuns, setPipelineRuns] = useState<PipelineRun[]>(INITIAL_PIPELINE_RUNS);
+  const [pipelineConfigured, setPipelineConfigured] = useState<boolean>(false);
+  const [pipelineMessage, setPipelineMessage] = useState<string>('Prototype mode');
+
   const [containers, setContainers] = useState<DockerContainer[]>(INITIAL_CONTAINERS);
   const [images] = useState<DockerImage[]>(INITIAL_IMAGES);
   const [logs, setLogs] = useState<LogEntry[]>(INITIAL_LOGS);
@@ -84,20 +100,65 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   
   const [apiOnline, setApiOnline] = useState(false);
+  const [backendLatencyMs, setBackendLatencyMs] = useState(0);
+  const [backendVersion, setBackendVersion] = useState('0.2.0');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [themeMode, setThemeMode] = useState<'navy' | 'midnight' | 'slate'>('navy');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const checkBackendHealth = async () => {
+  // Load genuine metrics from backend API
+  const loadLiveMetrics = useCallback(async () => {
+    try {
+      setMetricsLoading(true);
+      const res = await api.getMetrics();
+      setMetrics(res.metrics);
+      setIsLiveMetrics(res.isLive);
+      setMetricsError(null);
+    } catch (err: any) {
+      setMetricsError(err.message || 'Failed to fetch live system metrics');
+      setIsLiveMetrics(false);
+    } finally {
+      setMetricsLoading(false);
+    }
+  }, []);
+
+  // Health and connectivity check
+  const checkBackendHealth = useCallback(async () => {
     const res = await api.checkApiHealth();
     setApiOnline(res.online);
-  };
+    setBackendLatencyMs(res.latencyMs);
 
+    if (res.online) {
+      // Fetch version, metrics, and pipeline status
+      const ver = await api.fetchVersion();
+      if (ver) {
+        setBackendVersion(ver.version);
+      }
+
+      await loadLiveMetrics();
+
+      const pipeRes = await api.getPipelineStatus();
+      setPipelineConfigured(pipeRes.configured);
+      setPipelineMessage(pipeRes.message);
+      if (pipeRes.runs && pipeRes.runs.length > 0) {
+        setPipelineRuns(pipeRes.runs);
+      }
+
+      const actRes = await api.getActivities();
+      if (actRes.activities && actRes.activities.length > 0) {
+        setActivities(actRes.activities);
+      }
+    } else {
+      setIsLiveMetrics(false);
+    }
+  }, [loadLiveMetrics]);
+
+  // Initial mount health check & polling
   useEffect(() => {
     checkBackendHealth();
-    const interval = setInterval(checkBackendHealth, 15000);
+    const interval = setInterval(checkBackendHealth, 10000);
     return () => clearInterval(interval);
-  }, []);
+  }, [checkBackendHealth]);
 
   // Shortcut for Ctrl+K
   useEffect(() => {
@@ -111,8 +172,8 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const triggerNewRun = async (pipelineName: string, branch: string) => {
-    const newRun = await api.triggerPipeline(pipelineName, branch);
+  const triggerNewRun = async (pipelineName: string, branch: string, environment: string = 'development') => {
+    const newRun = await api.triggerPipeline(pipelineName, branch, environment);
     setPipelineRuns((prev) => [newRun, ...prev]);
     setSelectedPipelineRun(newRun);
     
@@ -121,16 +182,16 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       id: `act-${Date.now()}`,
       timestamp: 'Just now',
       type: 'pipeline',
-      title: `Pipeline ${pipelineName} triggered manually`,
-      description: `Dispatched build on ${branch} (commit ${newRun.commitHash})`,
-      author: 'Portfolio Admin',
+      title: `Pipeline ${pipelineName} triggered`,
+      description: `Dispatched build on ${branch} (Target: ${environment}) [commit ${newRun.commitHash}]`,
+      author: 'DevOps Engineer',
       status: 'info',
       metadataBadge: `#${newRun.runNumber}`,
     };
     setActivities((prev) => [newActivity, ...prev]);
 
     // Add initial log
-    addLogMessage('pipeline-runner', 'INFO', `Pipeline ${pipelineName} (#${newRun.runNumber}) initiated by user on ${branch}`);
+    addLogMessage('pipeline-runner', 'INFO', `Pipeline ${pipelineName} (#${newRun.runNumber}) initiated on ${branch}`);
   };
 
   const toggleContainer = (id: string, action: 'start' | 'stop' | 'restart') => {
@@ -164,7 +225,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       });
     }, 100);
 
-    addLogMessage('docker-daemon', 'INFO', `Container ${id} action performed: ${action.toUpperCase()}`);
+    addLogMessage('docker-daemon', 'INFO', `Container ${id} action performed: ${action.toUpperCase()} (Phase 3 Daemon Binding Ready)`);
   };
 
   const startAllContainers = () => {
@@ -218,18 +279,13 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setLogs([]);
   };
 
-  const refreshAllData = () => {
+  const refreshAllData = async () => {
     setIsRefreshing(true);
-    // Subtle metric fluctuation to feel alive
+    await checkBackendHealth();
+    await loadLiveMetrics();
     setTimeout(() => {
-      setMetrics((prev) => ({
-        ...prev,
-        cpuUsagePercent: Math.min(95, Math.max(15, prev.cpuUsagePercent + Math.floor(Math.random() * 9) - 4)),
-        networkRxMbps: Math.floor(800 + Math.random() * 120),
-        networkTxMbps: Math.floor(1800 + Math.random() * 200),
-      }));
       setIsRefreshing(false);
-    }, 600);
+    }, 500);
   };
 
   return (
@@ -238,8 +294,14 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         activePage,
         setActivePage,
         metrics,
+        isLiveMetrics,
+        metricsLoading,
+        metricsError,
+        loadLiveMetrics,
         engineInfo,
         pipelineRuns,
+        pipelineConfigured,
+        pipelineMessage,
         containers,
         images,
         logs,
@@ -254,6 +316,8 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         isCommandPaletteOpen,
         setIsCommandPaletteOpen,
         apiOnline,
+        backendLatencyMs,
+        backendVersion,
         checkBackendHealth,
         triggerNewRun,
         toggleContainer,

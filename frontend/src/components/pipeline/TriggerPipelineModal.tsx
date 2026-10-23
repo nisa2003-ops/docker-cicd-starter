@@ -17,7 +17,7 @@ export const TriggerPipelineModal: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    await triggerNewRun(pipelineName, branch);
+    await triggerNewRun(pipelineName, branch, environment);
     setIsSubmitting(false);
     setIsTriggerModalOpen(false);
     setActivePage('pipelines');

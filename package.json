@@ -5,6 +5,8 @@
   "description": "Docker CI/CD Starter Platform - Cloud/DevOps Engineering Portfolio Project",
   "scripts": {
     "dev": "npm --prefix frontend run dev",
+    "dev:backend": "python -m uvicorn app.main:app --app-dir backend --reload --host 127.0.0.1 --port 8000",
+    "test:backend": "python -m pytest backend/tests -v",
     "build": "npm --prefix frontend run build",
     "preview": "npm --prefix frontend run preview"
   },

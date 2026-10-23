@@ -152,16 +152,16 @@ export const Sidebar: React.FC = () => {
           );
         })}
 
-        {/* Demo Tag Notice */}
+        {/* Phase 2 Backend Notice */}
         {!sidebarCollapsed && (
           <div className="pt-6 px-1">
             <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 text-slate-400 text-xs space-y-2">
               <div className="flex items-center gap-2 text-cyan-400 font-medium">
                 <Radio className="w-3.5 h-3.5 animate-pulse" />
-                <span>Phase 1 Frontend</span>
+                <span>Phase 2: API Integration</span>
               </div>
               <p className="text-[11px] leading-relaxed text-slate-400">
-                Mock prototype mode active. Ready for FastAPI backend & Docker daemon binding in Phase 2.
+                FastAPI backend routes (/api/health, /api/metrics, /api/pipeline, /api/activity) connected with genuine psutil host telemetry.
               </p>
             </div>
           </div>

@@ -54,11 +54,18 @@ export const TopNav: React.FC = () => {
             </div>
           </div>
 
-          {/* Prototype Badge - clearly labeled per instructions */}
-          <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-[11px] font-mono text-amber-300">
-            <Sparkles className="w-3 h-3 text-amber-400" />
-            <span>Phase 1 Prototype Data</span>
-          </div>
+          {/* Backend Status Badge - clearly labeled per instructions */}
+          {apiOnline ? (
+            <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[11px] font-mono text-emerald-300">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span>FastAPI Connected</span>
+            </div>
+          ) : (
+            <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-[11px] font-mono text-amber-300">
+              <Sparkles className="w-3 h-3 text-amber-400" />
+              <span>Phase 2: Prototype Mode</span>
+            </div>
+          )}
         </div>
 
         {/* Center: Search Bar Trigger (Ctrl+K) */}

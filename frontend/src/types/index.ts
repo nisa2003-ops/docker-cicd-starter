@@ -2,7 +2,7 @@
 
 export type PageId = 'overview' | 'pipelines' | 'containers' | 'logs' | 'settings';
 
-export type SystemStatus = 'healthy' | 'degraded' | 'critical' | 'maintenance';
+export type SystemStatus = 'healthy' | 'degraded' | 'critical' | 'maintenance' | 'unavailable';
 
 export interface SystemMetrics {
   cpuUsagePercent: number;
@@ -17,6 +17,8 @@ export interface SystemMetrics {
   uptimeSeconds: number;
   uptimeFormatted: string;
   uptimePercentage: number;
+  isLive?: boolean;
+  status?: string;
 }
 
 export interface MetricDataPoint {
@@ -44,9 +46,99 @@ export interface ServiceRuntime {
   sparkline: number[];
 }
 
+// Backend API Raw Response Models (Matching FastAPI endpoints)
+
+export interface BackendHealthResponse {
+  status: string;
+  timestamp: string;
+  uptime_seconds: number;
+  uptime_formatted: string;
+  environment: string;
+  services: Record<string, string>;
+}
+
+export interface BackendVersionResponse {
+  name: string;
+  version: string;
+  environment: string;
+  python_version: string;
+  api_prefix: string;
+  docs_url?: string;
+  timestamp: string;
+}
+
+export interface BackendMetricsResponse {
+  status: string;
+  timestamp: string;
+  is_live_data: boolean;
+  cpu: {
+    percent: number;
+    cores_logical: number;
+    cores_physical?: number | null;
+    frequency_mhz?: number | null;
+    load_avg?: number[] | null;
+    status: string;
+  };
+  memory: {
+    total_bytes: number;
+    used_bytes: number;
+    available_bytes: number;
+    total_gb: number;
+    used_gb: number;
+    available_gb: number;
+    percent: number;
+    status: string;
+  };
+  disk: {
+    mount_point: string;
+    total_bytes: number;
+    used_bytes: number;
+    free_bytes: number;
+    total_gb: number;
+    used_gb: number;
+    free_gb: number;
+    percent: number;
+    status: string;
+  };
+  network: {
+    bytes_sent: number;
+    bytes_recv: number;
+    mb_sent: number;
+    mb_recv: number;
+    packets_sent: number;
+    packets_recv: number;
+    status: string;
+  };
+  host: {
+    platform: string;
+    boot_time_iso: string;
+    uptime_seconds: number;
+    uptime_formatted: string;
+  };
+}
+
+export interface BackendPipelineResponse {
+  configured: boolean;
+  status: 'unconfigured' | 'idle' | 'running' | 'unavailable' | 'operational';
+  provider?: string | null;
+  repository?: string | null;
+  message: string;
+  total_runs: number;
+  latest_run?: PipelineRun | null;
+  runs: PipelineRun[];
+}
+
+export interface BackendActivityResponse {
+  total: number;
+  page: number;
+  page_size: number;
+  items: ActivityEvent[];
+  timestamp: string;
+}
+
 // Pipeline Types
 
-export type PipelineStatus = 'success' | 'running' | 'failed' | 'queued' | 'cancelled';
+export type PipelineStatus = 'success' | 'running' | 'failed' | 'queued' | 'cancelled' | 'unconfigured';
 
 export interface PipelineStageStep {
   id: string;
@@ -160,7 +252,7 @@ export interface LogEntry {
 export interface ActivityEvent {
   id: string;
   timestamp: string;
-  type: 'deploy' | 'pipeline' | 'container' | 'security' | 'user';
+  type: 'deploy' | 'pipeline' | 'container' | 'security' | 'user' | 'system';
   title: string;
   description: string;
   author: string;
