@@ -1,0 +1,14 @@
+{
+  "name": "docker-cicd-starter",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Docker CI/CD Starter Platform - Cloud/DevOps Engineering Portfolio Project",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "preview": "npm --prefix frontend run preview"
+  },
+  "keywords": ["devops", "docker", "cicd", "react", "fastapi", "kubernetes", "portfolio"],
+  "author": "",
+  "license": "MIT"
+}
